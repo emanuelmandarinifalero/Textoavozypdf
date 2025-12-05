@@ -66,16 +66,16 @@
     </div>
 
     <script>
-    // CountAPI — contador global
-    fetch("https://api.countapi.xyz/hit/tts-lector-web/visitas")
-      .then(res => res.json())
-      .then(data => {
-        document.getElementById("visitasTotales").textContent = data.value;
-      })
-      .catch(() => {
-        document.getElementById("visitasTotales").textContent = "Error";
-      });
-    </script>
+fetch("https://api.countapi.xyz/hit/emanuel-tts-lector/visitas")
+  .then(response => response.json())
+  .then(data => {
+    document.getElementById("visitasTotales").textContent = data.value;
+  })
+  .catch((error) => {
+    console.log("Error en CountAPI:", error);
+    document.getElementById("visitasTotales").textContent = "Error";
+  });
+</script>
 
     <div id="app" class="w-full max-w-4xl p-6 sm:p-10 rounded-xl space-y-8">
 
