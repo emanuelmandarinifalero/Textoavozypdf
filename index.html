@@ -60,11 +60,21 @@
 
 <body class="p-4 sm:p-8 flex justify-center min-h-screen">
 
-    <!-- CONTADOR DE VISITAS -->
+    <!-- CONTADOR GLOBAL DE VISITAS -->
+    <div class="text-center text-sm text-gray-600 mb-4">
+        Visitas totales: <span id="visitasTotales">Cargando...</span>
+    </div>
+
     <script>
-        let visits = localStorage.getItem("visit_counter_tts") || 0;
-        visits++;
-        localStorage.setItem("visit_counter_tts", visits);
+    // CountAPI — contador global
+    fetch("https://api.countapi.xyz/hit/tts-lector-web/visitas")
+      .then(res => res.json())
+      .then(data => {
+        document.getElementById("visitasTotales").textContent = data.value;
+      })
+      .catch(() => {
+        document.getElementById("visitasTotales").textContent = "Error";
+      });
     </script>
 
     <div id="app" class="w-full max-w-4xl p-6 sm:p-10 rounded-xl space-y-8">
@@ -73,14 +83,9 @@
             🎙️ Lector de Texto a Voz (TTS) Web
         </h1>
 
-        <p class="text-center text-sm text-gray-600">
-            Visitas desde este navegador: <b><script>document.write(visits)</script></b>
-        </p>
-
-        <p class="text-center text-sm sm:text-base text-gray-500" data-i18n="subTitle">
+        <p class="text-center text-sm sm:text-base text-gray-500">
             Carga un PDF, pega texto, ajusta el volumen y navega. Haz clic o selecciona texto para empezar a leer.
         </p>
-
         <!-- Controles -->
         <div class="flex flex-col space-y-6 p-5 bg-gray-50 rounded-xl border border-gray-200">
 
@@ -181,369 +186,195 @@
     <!-- PDF.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 <script>
-//////////////////////////////////////////////////////////////
-// VARIABLES TTS / ESTADO
-//////////////////////////////////////////////////////////////
-
-const synth = window.speechSynthesis;
-let utterance = null;
+/* ===========================
+   VARIABLES GLOBALES
+=========================== */
 let paragraphs = [];
-let currentParagraphIndex = -1;
+let currentParagraph = 0;
+let isReading = false;
+let utterance = null;
 
-let currentLanguage = "es";
-let esVoice = null;
-let enVoice = null;
-
-let activeUtterances = [];
-let isManualStop = false;
-
-// DOM
-const textToReadEl = document.getElementById("textToRead");
-const playStopButton = document.getElementById("playStopButton");
-const playStopIcon = document.getElementById("playStopIcon");
-const playStopText = document.getElementById("playStopText");
-const nextParagraphButton = document.getElementById("nextParagraphButton");
-const prevParagraphButton = document.getElementById("prevParagraphButton");
-const clearButton = document.getElementById("clearButton");
-const volumeSlider = document.getElementById("volumeSlider");
-const volumeValueEl = document.getElementById("volumeValue");
-const rateSlider = document.getElementById("rateSlider");
-const rateValueEl = document.getElementById("rateValue");
-const messageArea = document.getElementById("messageArea");
-const pdfFileInput = document.getElementById("pdfFileInput");
-const paragraphIndexDisplay = document.getElementById("paragraphIndexDisplay");
-const languageSelect = document.getElementById("languageSelect");
-
-
-//////////////////////////////////////////////////////////////
-// PARSEAR PÁRRAFOS
-//////////////////////////////////////////////////////////////
-
-function parseParagraphs() {
-    const rawText = textToReadEl.value;
-    paragraphs = rawText.split(/\r?\n\s*\r?\n/).filter(p => p.trim() !== "");
+/* ===========================
+   DIVIDIR TEXTO EN PÁRRAFOS
+=========================== */
+function updateParagraphs() {
+    const raw = document.getElementById("textToRead").value.trim();
+    paragraphs = raw.split(/\n\s*\n+/).filter(p => p.trim().length > 0);
     updateParagraphDisplay();
 }
 
+/* ===========================
+   ACTUALIZAR DISPLAY
+=========================== */
 function updateParagraphDisplay() {
-    const total = paragraphs.length;
-    const current = currentParagraphIndex >= 0 && currentParagraphIndex < total
-        ? currentParagraphIndex + 1
-        : 0;
-    paragraphIndexDisplay.textContent = `${current} de ${total}`;
-}
-
-//////////////////////////////////////////////////////////////
-// RESALTAR PÁRRAFO
-//////////////////////////////////////////////////////////////
-function scrollToCurrentParagraph(startChar = 0, endChar = null) {
-    if (currentParagraphIndex < 0 || currentParagraphIndex >= paragraphs.length) return;
-
-    const full = textToReadEl.value;
-    const newlineRegex = /\r?\n\s*\r?\n/;
-    const rawParagraphs = full.split(newlineRegex);
-
-    let index = 0;
-
-    for (let i = 0; i < currentParagraphIndex; i++) {
-        index += rawParagraphs[i].length;
-        const sep = full.substring(index).match(newlineRegex);
-        index += sep ? sep[0].length : 2;
-    }
-
-    const start = index + startChar;
-    const end = index + (endChar ?? paragraphs[currentParagraphIndex].length);
-
-    textToReadEl.focus();
-    textToReadEl.setSelectionRange(start, end);
-
-    const lineHeight = parseInt(getComputedStyle(textToReadEl).lineHeight);
-    const lines = full.substring(0, start).split("\n").length;
-    textToReadEl.scrollTop = lines * lineHeight - textToReadEl.clientHeight / 2;
-}
-
-
-//////////////////////////////////////////////////////////////
-// TTS — REPRODUCIR
-//////////////////////////////////////////////////////////////
-function speak(text, startCharIndex = 0) {
-    if (!synth) {
-        alertMessage("Este navegador no soporta TTS");
-        return;
-    }
-
-    const cleanedText = text.trim();
-    if (!cleanedText) return;
-
-    if (synth.paused) {
-        synth.resume();
-        updateButtonState();
-        return;
-    }
-
-    if (synth.speaking) synth.cancel();
-
-    const u = new SpeechSynthesisUtterance(cleanedText.substring(startCharIndex));
-    u.volume = parseFloat(volumeSlider.value);
-    u.rate = parseFloat(rateSlider.value);
-    u.lang = currentLanguage === "es" ? "es-ES" : "en-US";
-    u.voice = currentLanguage === "es" ? esVoice : enVoice;
-
-    utterance = u;
-    activeUtterances.push(u);
-
-    u.onstart = () => {
-        updateButtonState();
-        scrollToCurrentParagraph(startCharIndex);
-    };
-
-    u.onboundary = (e) => {
-        if (e.name === "word") {
-            const s = startCharIndex + e.charIndex;
-            scrollToCurrentParagraph(s, s + e.charLength);
-        }
-    };
-
-    u.onend = () => {
-        const idx = activeUtterances.indexOf(u);
-        if (idx >= 0) activeUtterances.splice(idx, 1);
-        utterance = null;
-
-        if (isManualStop) {
-            isManualStop = false;
-            updateButtonState();
-            return;
-        }
-
-        setTimeout(() => goToNextParagraph(true), 120);
-    };
-
-    synth.speak(u);
-    updateParagraphDisplay();
-}
-
-//////////////////////////////////////////////////////////////
-// DETENER
-//////////////////////////////////////////////////////////////
-function stop() {
-    if (synth.speaking || synth.paused) {
-        isManualStop = true;
-        synth.cancel();
-    }
-    textToReadEl.setSelectionRange(0, 0);
-    updateButtonState();
-}
-
-function updateButtonState() {
-    playStopButton.classList.remove(
-        "bg-gray-700", "bg-blue-500", "bg-red-500",
-        "hover:bg-gray-800", "hover:bg-blue-600", "hover:bg-red-600"
-    );
-
-    if (synth.speaking && !synth.paused) {
-        playStopIcon.textContent = "⏸️";
-        playStopText.textContent = "Pausar";
-        playStopButton.classList.add("bg-gray-700", "hover:bg-gray-800");
-
-    } else if (synth.paused) {
-        playStopIcon.textContent = "▶️";
-        playStopText.textContent = "Reanudar";
-        playStopButton.classList.add("bg-blue-500", "hover:bg-blue-600");
-
+    const display = document.getElementById("paragraphIndexDisplay");
+    if (paragraphs.length === 0) {
+        display.textContent = "0 de 0";
     } else {
-        playStopIcon.textContent = "▶️";
-        playStopText.textContent = "Reproducir";
-        playStopButton.classList.add("bg-gray-700", "hover:bg-gray-800");
+        display.textContent = `${currentParagraph + 1} de ${paragraphs.length}`;
     }
 }
 
-//////////////////////////////////////////////////////////////
-// NAVEGACIÓN
-//////////////////////////////////////////////////////////////
-function goToNextParagraph(auto = false) {
-    parseParagraphs();
-    stop();
+/* ===========================
+   REPRODUCIR PÁRRAFO
+=========================== */
+function speakParagraph(index) {
+    if (index < 0 || index >= paragraphs.length) return;
 
-    if (paragraphs.length === 0) return;
+    const text = paragraphs[index];
 
-    if (currentParagraphIndex === -1 && !auto) {
-        currentParagraphIndex = 0;
-    } else {
-        currentParagraphIndex++;
-    }
+    if (!text || text.trim().length === 0) return;
 
-    if (currentParagraphIndex >= paragraphs.length) {
-        currentParagraphIndex = -1;
-        alertMessage("Fin del texto.");
-        updateParagraphDisplay();
-        return;
-    }
+    if (utterance) speechSynthesis.cancel();
 
-    speak(paragraphs[currentParagraphIndex], 0);
-}
+    utterance = new SpeechSynthesisUtterance(text);
 
-function goToPreviousParagraph() {
-    parseParagraphs();
-    stop();
+    utterance.lang = document.getElementById("languageSelect").value;
+    utterance.volume = parseFloat(document.getElementById("volumeSlider").value);
+    utterance.rate = parseFloat(document.getElementById("rateSlider").value);
 
-    if (paragraphs.length === 0) return;
-
-    currentParagraphIndex--;
-
-    if (currentParagraphIndex < 0) {
-        currentParagraphIndex = 0;
-        alertMessage("Estás al inicio.");
-        return;
-    }
-
-    speak(paragraphs[currentParagraphIndex], 0);
-}
-
-//////////////////////////////////////////////////////////////
-// CLICK EN TEXTAREA → LEER PARRAFO
-//////////////////////////////////////////////////////////////
-function handleClickToRead() {
-    parseParagraphs();
-    if (paragraphs.length === 0) return;
-
-    const pos = textToReadEl.selectionStart;
-
-    const full = textToReadEl.value;
-    const raw = full.split(/\r?\n\s*\r?\n/);
-
-    let index = 0;
-
-    for (let i = 0; i < raw.length; i++) {
-        const p = raw[i];
-        const start = index;
-        const end = index + p.length;
-
-        if (pos >= start && pos <= end + 2) {
-            const clean = p.trim();
-            const cleanIndex = paragraphs.indexOf(clean);
-            if (cleanIndex !== -1) {
-                currentParagraphIndex = cleanIndex;
-
-                const offset = pos - start;
-                stop();
-                speak(clean, Math.max(0, offset));
-                return;
+    utterance.onend = () => {
+        if (isReading) {
+            currentParagraph++;
+            if (currentParagraph < paragraphs.length) {
+                updateParagraphDisplay();
+                speakParagraph(currentParagraph);
+            } else {
+                isReading = false;
+                updatePlayStopUI();
             }
         }
+    };
 
-        index = end + 2;
+    speechSynthesis.speak(utterance);
+}
+
+/* ===========================
+   BOTÓN ▶ / ⏹
+=========================== */
+function updatePlayStopUI() {
+    const icon = document.getElementById("playStopIcon");
+    const text = document.getElementById("playStopText");
+
+    if (isReading) {
+        icon.textContent = "⏹";
+        text.textContent = "Detener";
+    } else {
+        icon.textContent = "▶️";
+        text.textContent = "Reproducir";
     }
 }
 
-//////////////////////////////////////////////////////////////
-// PDF LOADER
-//////////////////////////////////////////////////////////////
-async function handlePdfUpload(e) {
+/* ===========================
+   PLAY / STOP
+=========================== */
+document.getElementById("playStopButton").addEventListener("click", () => {
+    updateParagraphs();
+
+    if (!isReading) {
+        if (paragraphs.length === 0) return;
+
+        isReading = true;
+        updatePlayStopUI();
+        speakParagraph(currentParagraph);
+    } else {
+        isReading = false;
+        speechSynthesis.cancel();
+        updatePlayStopUI();
+    }
+});
+
+/* ===========================
+   BOTONES SIGUIENTE / ANTERIOR
+=========================== */
+document.getElementById("nextParagraphButton").addEventListener("click", () => {
+    updateParagraphs();
+    if (currentParagraph < paragraphs.length - 1) {
+        currentParagraph++;
+        updateParagraphDisplay();
+        speakParagraph(currentParagraph);
+    }
+});
+
+document.getElementById("prevParagraphButton").addEventListener("click", () => {
+    updateParagraphs();
+    if (currentParagraph > 0) {
+        currentParagraph--;
+        updateParagraphDisplay();
+        speakParagraph(currentParagraph);
+    }
+});
+
+/* ===========================
+   BORRAR TEXTO
+=========================== */
+document.getElementById("clearButton").addEventListener("click", () => {
+    speechSynthesis.cancel();
+    document.getElementById("textToRead").value = "";
+    paragraphs = [];
+    currentParagraph = 0;
+    isReading = false;
+    updateParagraphDisplay();
+    updatePlayStopUI();
+});
+
+/* ===========================
+   SLIDERS
+=========================== */
+document.getElementById("volumeSlider").addEventListener("input", (e) => {
+    document.getElementById("volumeValue").textContent =
+        Math.round(e.target.value * 100) + "%";
+});
+
+document.getElementById("rateSlider").addEventListener("input", (e) => {
+    document.getElementById("rateValue").textContent = e.target.value + "x";
+});
+
+/* ===========================
+   LECTURA AL SELECCIONAR TEXTO
+=========================== */
+document.getElementById("textToRead").addEventListener("mouseup", () => {
+    const selected = window.getSelection().toString().trim();
+    if (selected.length > 0) {
+        speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(selected);
+        u.lang = document.getElementById("languageSelect").value;
+        u.volume = parseFloat(document.getElementById("volumeSlider").value);
+        u.rate = parseFloat(document.getElementById("rateSlider").value);
+        speechSynthesis.speak(u);
+    }
+});
+
+/* ===========================
+   LEER PDF CON PDF.js
+=========================== */
+document.getElementById("pdfFileInput").addEventListener("change", async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    textToReadEl.value = "Cargando PDF...";
-    alertMessage("Extrayendo texto del PDF...");
+    const arrayBuffer = await file.arrayBuffer();
 
-    try {
-        const buf = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
-        let txt = "";
+    let extractedText = "";
 
-        for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const content = await page.getTextContent();
-            txt += content.items.map(t => t.str).join(" ") + "\n\n";
-        }
-
-        textToReadEl.value = txt.trim();
-        textToReadEl.dispatchEvent(new Event("input"));
-        currentParagraphIndex = -1;
-        alertMessage("PDF cargado correctamente.");
-
-    } catch (err) {
-        textToReadEl.value = "";
-        alertMessage("Error al leer PDF: " + err.message);
+    for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        extractedText += content.items.map(i => i.str).join(" ") + "\n\n";
     }
 
-    e.target.value = "";
-}
+    document.getElementById("textToRead").value = extractedText.trim();
 
-//////////////////////////////////////////////////////////////
-// ALERTAS
-//////////////////////////////////////////////////////////////
-function alertMessage(msg) {
-    messageArea.textContent = msg;
-    messageArea.classList.remove("hidden");
-
-    setTimeout(() => messageArea.classList.add("hidden"), 4000);
-}
-
-//////////////////////////////////////////////////////////////
-// EVENTOS
-//////////////////////////////////////////////////////////////
-
-playStopButton.addEventListener("click", () => {
-    parseParagraphs();
-
-    if (synth.speaking && !synth.paused) {
-        synth.pause();
-    } else if (synth.paused) {
-        synth.resume();
-        updateButtonState();
-    } else {
-        if (currentParagraphIndex === -1) currentParagraphIndex = 0;
-        speak(paragraphs[currentParagraphIndex], 0);
-    }
+    updateParagraphs();
 });
 
-nextParagraphButton.addEventListener("click", () => goToNextParagraph(false));
-prevParagraphButton.addEventListener("click", goToPreviousParagraph);
-clearButton.addEventListener("click", () => {
-    textToReadEl.value = "";
-    stop();
-    currentParagraphIndex = -1;
-    parseParagraphs();
-});
+/* ===========================
+   ACTUALIZAR PÁRRAFOS AUTOMÁTICO
+=========================== */
+document.getElementById("textToRead").addEventListener("input", updateParagraphs);
 
-pdfFileInput.addEventListener("change", handlePdfUpload);
-
-volumeSlider.addEventListener("input", () => {
-    volumeValueEl.textContent = Math.round(volumeSlider.value * 100) + "%";
-    if (utterance) utterance.volume = volumeSlider.value;
-});
-
-rateSlider.addEventListener("input", () => {
-    rateValueEl.textContent = rateSlider.value + "x";
-    if (synth.speaking) {
-        stop();
-        setTimeout(() => {
-            if (currentParagraphIndex >= 0)
-                speak(paragraphs[currentParagraphIndex], 0);
-        }, 200);
-    }
-});
-
-textToReadEl.addEventListener("mouseup", handleClickToRead);
-textToReadEl.addEventListener("keyup", handleClickToRead);
-
-textToReadEl.addEventListener("input", () => {
-    textToReadEl.style.height = "auto";
-    textToReadEl.style.height = textToReadEl.scrollHeight + "px";
-    parseParagraphs();
-});
-
-window.addEventListener("load", () => {
-    synth.onvoiceschanged = () => {
-        const v = synth.getVoices();
-        esVoice = v.find(e => e.lang.startsWith("es"));
-        enVoice = v.find(e => e.lang.startsWith("en"));
-    };
-
-    synth.onvoiceschanged();
-    parseParagraphs();
-});
+updateParagraphs();
 </script>
 
 </body>
