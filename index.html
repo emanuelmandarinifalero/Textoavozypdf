@@ -1,25 +1,550 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Lector de Texto a Voz (TTS)</title>
-<link rel="stylesheet" href="style.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lector TTS Web</title>
+
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        body {
+            background-color: #f7f7f7; 
+            font-family: 'Inter', sans-serif;
+            color: #333;
+        }
+        #app {
+            background-color: #ffffff;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.05), 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e0e0e0;
+        }
+        button {
+            transition: all 0.2s ease-in-out;
+            border-radius: 9999px; 
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+        button:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        #textToRead {
+            overflow-y: auto; 
+            white-space: pre-wrap; 
+            min-height: 250px; 
+            border-color: #ccc;
+            border-radius: 0.5rem; 
+            color: #1f2937;
+            caret-color: #3b82f6; 
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+        }
+        .control-group {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            border: 1px solid #ddd;
+            border-radius: 0.75rem;
+            background-color: #f9fafb;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+    </style>
 </head>
-<body>
-<h1>Lector de Texto a Voz (TTS)</h1>
 
-<div id="visit-counter">
-  Visitas: <span id="visits">Cargando...</span>
-</div>
+<body class="p-4 sm:p-8 flex justify-center min-h-screen">
 
-<textarea id="textToRead" placeholder="Escribe o pega texto aquí..."></textarea>
+    <!-- CONTADOR DE VISITAS -->
+    <script>
+        let visits = localStorage.getItem("visit_counter_tts") || 0;
+        visits++;
+        localStorage.setItem("visit_counter_tts", visits);
+    </script>
 
-<div class="controls">
-  <button id="playBtn">Reproducir</button>
-  <button id="stopBtn">Detener</button>
-</div>
+    <div id="app" class="w-full max-w-4xl p-6 sm:p-10 rounded-xl space-y-8">
 
-<script src="script.js"></script>
+        <h1 class="text-3xl sm:text-4xl font-extrabold text-gray-800 text-center">
+            🎙️ Lector de Texto a Voz (TTS) Web
+        </h1>
+
+        <p class="text-center text-sm text-gray-600">
+            Visitas desde este navegador: <b><script>document.write(visits)</script></b>
+        </p>
+
+        <p class="text-center text-sm sm:text-base text-gray-500" data-i18n="subTitle">
+            Carga un PDF, pega texto, ajusta el volumen y navega. Haz clic o selecciona texto para empezar a leer.
+        </p>
+
+        <!-- Controles -->
+        <div class="flex flex-col space-y-6 p-5 bg-gray-50 rounded-xl border border-gray-200">
+
+            <div class="flex flex-wrap justify-center items-center gap-3 text-sm font-medium text-gray-600">
+
+                <div class="control-group">
+                    <span class="text-gray-700 text-sm font-bold mr-2">Párrafo Actual:</span>
+                    <span id="paragraphIndexDisplay" class="font-extrabold text-lg text-blue-600">0 de 0</span>
+                </div>
+
+                <div class="control-group">
+                    <label for="languageSelect" class="mr-2 whitespace-nowrap">Idioma:</label>
+                    <select id="languageSelect" class="p-1 border-none rounded-md bg-transparent focus:ring-0">
+                        <option value="es">Español 🇪🇸</option>
+                        <option value="en">Inglés 🇬🇧</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label for="volumeSlider" class="mr-2 whitespace-nowrap">Volumen:</label>
+                    <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="1" class="w-20">
+                    <span id="volumeValue" class="w-8 text-right font-semibold text-xs ml-2">100%</span>
+                </div>
+
+                <div class="control-group">
+                    <label for="rateSlider" class="mr-2 whitespace-nowrap">Velocidad:</label>
+                    <input type="range" id="rateSlider" min="0.5" max="2" step="0.1" value="1.0" class="w-20">
+                    <span id="rateValue" class="w-8 text-right font-semibold text-xs ml-2">1.0x</span>
+                </div>
+            </div>
+
+            <!-- Botones -->
+            <div class="flex flex-wrap justify-center gap-3 pt-4">
+
+                <button id="prevParagraphButton"
+                    class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-5 rounded-full shadow-md">
+                    ⏪ <span class="hidden sm:inline">Párrafo Anterior</span>
+                </button>
+
+                <button id="playStopButton"
+                    class="bg-gray-700 hover:bg-gray-800 text-white font-extrabold py-3 px-8 rounded-full shadow-xl ring-4 ring-gray-300">
+                    <span id="playStopIcon">▶️</span>
+                    <span id="playStopText">Reproducir</span>
+                </button>
+
+                <button id="nextParagraphButton"
+                    class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-5 rounded-full shadow-md">
+                    <span class="hidden sm:inline">Párrafo Siguiente</span> ⏩
+                </button>
+
+                <button id="clearButton"
+                    class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-5 rounded-full shadow-md">
+                    🗑️ <span class="hidden sm:inline">Borrar Texto</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- PDF -->
+        <div class="space-y-3 p-4 bg-blue-50 rounded-xl border border-blue-200">
+            <label class="block text-lg font-bold text-blue-800">1. Cargar PDF:</label>
+            <input type="file" id="pdfFileInput" accept=".pdf"
+                class="w-full text-sm text-blue-700 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0
+            file:text-sm file:font-semibold file:bg-blue-200 file:text-blue-800 hover:file:bg-blue-300 cursor-pointer" />
+        </div>
+
+        <!-- Textarea -->
+        <div class="relative">
+            <label class="block text-lg font-bold text-gray-700 mb-2">
+                2. Texto a Leer:
+            </label>
+
+            <textarea id="textToRead"
+                placeholder="Escribe o pega el texto aquí. El texto extraído del PDF aparecerá aquí."
+                rows="10"
+                class="w-full p-4 border-2 border-gray-300 rounded-xl focus:ring-blue-500 focus:border-blue-500 
+                text-base cursor-text font-serif resize-none">
+            </textarea>
+        </div>
+
+        <!-- Mensajes -->
+        <div id="messageArea"
+            class="mt-4 p-3 bg-yellow-100 border border-yellow-300 text-yellow-800 rounded-lg hidden text-center font-medium">
+        </div>
+
+        <div class="mt-10 pt-4 border-t border-gray-300 text-center space-y-4">
+            <p class="text-sm text-gray-600 font-medium">
+                Autor: Emanuel Mandarini Falero
+            </p>
+
+            <div id="ad-space"
+                class="bg-gray-200 p-4 rounded-lg border-2 border-dashed border-gray-400 text-gray-600 text-sm italic h-24 flex items-center justify-center">
+                [Espacio reservado para anuncios]
+            </div>
+        </div>
+
+    </div> <!-- FIN #app -->
+
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+<script>
+//////////////////////////////////////////////////////////////
+// VARIABLES TTS / ESTADO
+//////////////////////////////////////////////////////////////
+
+const synth = window.speechSynthesis;
+let utterance = null;
+let paragraphs = [];
+let currentParagraphIndex = -1;
+
+let currentLanguage = "es";
+let esVoice = null;
+let enVoice = null;
+
+let activeUtterances = [];
+let isManualStop = false;
+
+// DOM
+const textToReadEl = document.getElementById("textToRead");
+const playStopButton = document.getElementById("playStopButton");
+const playStopIcon = document.getElementById("playStopIcon");
+const playStopText = document.getElementById("playStopText");
+const nextParagraphButton = document.getElementById("nextParagraphButton");
+const prevParagraphButton = document.getElementById("prevParagraphButton");
+const clearButton = document.getElementById("clearButton");
+const volumeSlider = document.getElementById("volumeSlider");
+const volumeValueEl = document.getElementById("volumeValue");
+const rateSlider = document.getElementById("rateSlider");
+const rateValueEl = document.getElementById("rateValue");
+const messageArea = document.getElementById("messageArea");
+const pdfFileInput = document.getElementById("pdfFileInput");
+const paragraphIndexDisplay = document.getElementById("paragraphIndexDisplay");
+const languageSelect = document.getElementById("languageSelect");
+
+
+//////////////////////////////////////////////////////////////
+// PARSEAR PÁRRAFOS
+//////////////////////////////////////////////////////////////
+
+function parseParagraphs() {
+    const rawText = textToReadEl.value;
+    paragraphs = rawText.split(/\r?\n\s*\r?\n/).filter(p => p.trim() !== "");
+    updateParagraphDisplay();
+}
+
+function updateParagraphDisplay() {
+    const total = paragraphs.length;
+    const current = currentParagraphIndex >= 0 && currentParagraphIndex < total
+        ? currentParagraphIndex + 1
+        : 0;
+    paragraphIndexDisplay.textContent = `${current} de ${total}`;
+}
+
+//////////////////////////////////////////////////////////////
+// RESALTAR PÁRRAFO
+//////////////////////////////////////////////////////////////
+function scrollToCurrentParagraph(startChar = 0, endChar = null) {
+    if (currentParagraphIndex < 0 || currentParagraphIndex >= paragraphs.length) return;
+
+    const full = textToReadEl.value;
+    const newlineRegex = /\r?\n\s*\r?\n/;
+    const rawParagraphs = full.split(newlineRegex);
+
+    let index = 0;
+
+    for (let i = 0; i < currentParagraphIndex; i++) {
+        index += rawParagraphs[i].length;
+        const sep = full.substring(index).match(newlineRegex);
+        index += sep ? sep[0].length : 2;
+    }
+
+    const start = index + startChar;
+    const end = index + (endChar ?? paragraphs[currentParagraphIndex].length);
+
+    textToReadEl.focus();
+    textToReadEl.setSelectionRange(start, end);
+
+    const lineHeight = parseInt(getComputedStyle(textToReadEl).lineHeight);
+    const lines = full.substring(0, start).split("\n").length;
+    textToReadEl.scrollTop = lines * lineHeight - textToReadEl.clientHeight / 2;
+}
+
+
+//////////////////////////////////////////////////////////////
+// TTS — REPRODUCIR
+//////////////////////////////////////////////////////////////
+function speak(text, startCharIndex = 0) {
+    if (!synth) {
+        alertMessage("Este navegador no soporta TTS");
+        return;
+    }
+
+    const cleanedText = text.trim();
+    if (!cleanedText) return;
+
+    if (synth.paused) {
+        synth.resume();
+        updateButtonState();
+        return;
+    }
+
+    if (synth.speaking) synth.cancel();
+
+    const u = new SpeechSynthesisUtterance(cleanedText.substring(startCharIndex));
+    u.volume = parseFloat(volumeSlider.value);
+    u.rate = parseFloat(rateSlider.value);
+    u.lang = currentLanguage === "es" ? "es-ES" : "en-US";
+    u.voice = currentLanguage === "es" ? esVoice : enVoice;
+
+    utterance = u;
+    activeUtterances.push(u);
+
+    u.onstart = () => {
+        updateButtonState();
+        scrollToCurrentParagraph(startCharIndex);
+    };
+
+    u.onboundary = (e) => {
+        if (e.name === "word") {
+            const s = startCharIndex + e.charIndex;
+            scrollToCurrentParagraph(s, s + e.charLength);
+        }
+    };
+
+    u.onend = () => {
+        const idx = activeUtterances.indexOf(u);
+        if (idx >= 0) activeUtterances.splice(idx, 1);
+        utterance = null;
+
+        if (isManualStop) {
+            isManualStop = false;
+            updateButtonState();
+            return;
+        }
+
+        setTimeout(() => goToNextParagraph(true), 120);
+    };
+
+    synth.speak(u);
+    updateParagraphDisplay();
+}
+
+//////////////////////////////////////////////////////////////
+// DETENER
+//////////////////////////////////////////////////////////////
+function stop() {
+    if (synth.speaking || synth.paused) {
+        isManualStop = true;
+        synth.cancel();
+    }
+    textToReadEl.setSelectionRange(0, 0);
+    updateButtonState();
+}
+
+function updateButtonState() {
+    playStopButton.classList.remove(
+        "bg-gray-700", "bg-blue-500", "bg-red-500",
+        "hover:bg-gray-800", "hover:bg-blue-600", "hover:bg-red-600"
+    );
+
+    if (synth.speaking && !synth.paused) {
+        playStopIcon.textContent = "⏸️";
+        playStopText.textContent = "Pausar";
+        playStopButton.classList.add("bg-gray-700", "hover:bg-gray-800");
+
+    } else if (synth.paused) {
+        playStopIcon.textContent = "▶️";
+        playStopText.textContent = "Reanudar";
+        playStopButton.classList.add("bg-blue-500", "hover:bg-blue-600");
+
+    } else {
+        playStopIcon.textContent = "▶️";
+        playStopText.textContent = "Reproducir";
+        playStopButton.classList.add("bg-gray-700", "hover:bg-gray-800");
+    }
+}
+
+//////////////////////////////////////////////////////////////
+// NAVEGACIÓN
+//////////////////////////////////////////////////////////////
+function goToNextParagraph(auto = false) {
+    parseParagraphs();
+    stop();
+
+    if (paragraphs.length === 0) return;
+
+    if (currentParagraphIndex === -1 && !auto) {
+        currentParagraphIndex = 0;
+    } else {
+        currentParagraphIndex++;
+    }
+
+    if (currentParagraphIndex >= paragraphs.length) {
+        currentParagraphIndex = -1;
+        alertMessage("Fin del texto.");
+        updateParagraphDisplay();
+        return;
+    }
+
+    speak(paragraphs[currentParagraphIndex], 0);
+}
+
+function goToPreviousParagraph() {
+    parseParagraphs();
+    stop();
+
+    if (paragraphs.length === 0) return;
+
+    currentParagraphIndex--;
+
+    if (currentParagraphIndex < 0) {
+        currentParagraphIndex = 0;
+        alertMessage("Estás al inicio.");
+        return;
+    }
+
+    speak(paragraphs[currentParagraphIndex], 0);
+}
+
+//////////////////////////////////////////////////////////////
+// CLICK EN TEXTAREA → LEER PARRAFO
+//////////////////////////////////////////////////////////////
+function handleClickToRead() {
+    parseParagraphs();
+    if (paragraphs.length === 0) return;
+
+    const pos = textToReadEl.selectionStart;
+
+    const full = textToReadEl.value;
+    const raw = full.split(/\r?\n\s*\r?\n/);
+
+    let index = 0;
+
+    for (let i = 0; i < raw.length; i++) {
+        const p = raw[i];
+        const start = index;
+        const end = index + p.length;
+
+        if (pos >= start && pos <= end + 2) {
+            const clean = p.trim();
+            const cleanIndex = paragraphs.indexOf(clean);
+            if (cleanIndex !== -1) {
+                currentParagraphIndex = cleanIndex;
+
+                const offset = pos - start;
+                stop();
+                speak(clean, Math.max(0, offset));
+                return;
+            }
+        }
+
+        index = end + 2;
+    }
+}
+
+//////////////////////////////////////////////////////////////
+// PDF LOADER
+//////////////////////////////////////////////////////////////
+async function handlePdfUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    textToReadEl.value = "Cargando PDF...";
+    alertMessage("Extrayendo texto del PDF...");
+
+    try {
+        const buf = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+
+        let txt = "";
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const content = await page.getTextContent();
+            txt += content.items.map(t => t.str).join(" ") + "\n\n";
+        }
+
+        textToReadEl.value = txt.trim();
+        textToReadEl.dispatchEvent(new Event("input"));
+        currentParagraphIndex = -1;
+        alertMessage("PDF cargado correctamente.");
+
+    } catch (err) {
+        textToReadEl.value = "";
+        alertMessage("Error al leer PDF: " + err.message);
+    }
+
+    e.target.value = "";
+}
+
+//////////////////////////////////////////////////////////////
+// ALERTAS
+//////////////////////////////////////////////////////////////
+function alertMessage(msg) {
+    messageArea.textContent = msg;
+    messageArea.classList.remove("hidden");
+
+    setTimeout(() => messageArea.classList.add("hidden"), 4000);
+}
+
+//////////////////////////////////////////////////////////////
+// EVENTOS
+//////////////////////////////////////////////////////////////
+
+playStopButton.addEventListener("click", () => {
+    parseParagraphs();
+
+    if (synth.speaking && !synth.paused) {
+        synth.pause();
+    } else if (synth.paused) {
+        synth.resume();
+        updateButtonState();
+    } else {
+        if (currentParagraphIndex === -1) currentParagraphIndex = 0;
+        speak(paragraphs[currentParagraphIndex], 0);
+    }
+});
+
+nextParagraphButton.addEventListener("click", () => goToNextParagraph(false));
+prevParagraphButton.addEventListener("click", goToPreviousParagraph);
+clearButton.addEventListener("click", () => {
+    textToReadEl.value = "";
+    stop();
+    currentParagraphIndex = -1;
+    parseParagraphs();
+});
+
+pdfFileInput.addEventListener("change", handlePdfUpload);
+
+volumeSlider.addEventListener("input", () => {
+    volumeValueEl.textContent = Math.round(volumeSlider.value * 100) + "%";
+    if (utterance) utterance.volume = volumeSlider.value;
+});
+
+rateSlider.addEventListener("input", () => {
+    rateValueEl.textContent = rateSlider.value + "x";
+    if (synth.speaking) {
+        stop();
+        setTimeout(() => {
+            if (currentParagraphIndex >= 0)
+                speak(paragraphs[currentParagraphIndex], 0);
+        }, 200);
+    }
+});
+
+textToReadEl.addEventListener("mouseup", handleClickToRead);
+textToReadEl.addEventListener("keyup", handleClickToRead);
+
+textToReadEl.addEventListener("input", () => {
+    textToReadEl.style.height = "auto";
+    textToReadEl.style.height = textToReadEl.scrollHeight + "px";
+    parseParagraphs();
+});
+
+window.addEventListener("load", () => {
+    synth.onvoiceschanged = () => {
+        const v = synth.getVoices();
+        esVoice = v.find(e => e.lang.startsWith("es"));
+        enVoice = v.find(e => e.lang.startsWith("en"));
+    };
+
+    synth.onvoiceschanged();
+    parseParagraphs();
+});
+</script>
+
 </body>
 </html>
