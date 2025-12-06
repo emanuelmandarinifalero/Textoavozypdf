@@ -1,9 +1,8 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-i18n="pageTitle">Lector de texto</title>
 
     <!-- Tailwind -->
@@ -11,166 +10,633 @@
 
     <style>
         body {
-            background-color: #f5f5f5;
-            font-family: "Inter", sans-serif;
+            background-color: #f7f7f7; 
+            font-family: 'Inter', sans-serif;
+            color: #333;
+        }
+        #app {
+            background-color: #ffffff;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.05), 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e0e0e0;
+        }
+        button {
+            transition: all 0.2s ease-in-out;
+            border-radius: 9999px; 
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+        button:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
         }
         #textToRead {
-            min-height: 200px;
-            white-space: pre-wrap;
+            overflow-y: auto; 
+            white-space: pre-wrap; 
+            min-height: 250px; 
+            border-color: #ccc;
+            border-radius: 0.5rem; 
+            color: #1f2937;
+            caret-color: #3b82f6; 
         }
-        button { transition: 0.2s; }
-        button:hover { opacity: 0.9; transform: translateY(-1px); }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #3b82f6;
+        }
+        .control-group {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            border: 1px solid #ddd;
+            border-radius: 0.75rem;
+            background-color: #f9fafb;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
     </style>
 </head>
 
-<body class="p-4 flex justify-center min-h-screen">
+<body class="p-4 sm:p-8 flex justify-center min-h-screen">
 
-<div id="app" class="w-full max-w-3xl p-6 bg-white rounded-xl shadow-xl space-y-6 border">
+<div id="app" class="w-full max-w-4xl p-6 sm:p-10 rounded-xl space-y-8">
 
     <!-- TÍTULO -->
-    <h1 class="text-3xl font-extrabold text-center text-gray-800" data-i18n="mainTitle">
+    <h1 class="text-3xl sm:text-4xl font-extrabold text-gray-800 text-center" data-i18n="mainTitle">
         Lector de texto
     </h1>
 
-    <!-- SUBTÍTULO -->
-    <p class="text-center text-gray-500 text-sm sm:text-base" data-i18n="subTitle">
+    <!-- SUBTÍTULO (NO SE TOCA) -->
+    <p class="text-center text-sm sm:text-base text-gray-500" data-i18n="subTitle">
         Carga un PDF, pega texto, ajusta el volumen y navega. Haz clic o selecciona texto para empezar a leer.
     </p>
 
-    <!-- Selección de idioma -->
-    <div class="flex justify-center">
-        <div class="flex items-center gap-3 bg-gray-100 px-4 py-2 rounded-lg border">
-            <label class="font-semibold text-gray-700" data-i18n="labelLanguage">Idioma:</label>
-            <select id="languageSelect" class="border p-1 rounded">
-                <option value="es">Español 🇪🇸</option>
-                <option value="en">Inglés 🇺🇸</option>
-            </select>
+    <!-- CONTROLES SUPERIORES -->
+    <div class="flex flex-col space-y-6 p-5 bg-gray-50 rounded-xl border">
+
+        <div class="flex flex-wrap justify-center items-center gap-3 sm:gap-4 text-sm font-medium text-gray-600">
+
+            <!-- Párrafo actual -->
+            <div class="control-group">
+                <span data-i18n="labelParagraphCurrent" class="font-bold mr-2">Párrafo actual:</span>
+                <span id="paragraphIndexDisplay" class="font-extrabold text-lg text-blue-600">0 de 0</span>
+            </div>
+
+            <!-- Idioma -->
+            <div class="control-group">
+                <label for="languageSelect" class="mr-2" data-i18n="labelLanguage">Idioma:</label>
+                <select id="languageSelect" class="p-1 bg-transparent border-none">
+                    <option value="es">Español 🇪🇸</option>
+                    <option value="en">Inglés 🇺🇸</option>
+                </select>
+            </div>
+
+            <!-- Volumen -->
+            <div class="control-group">
+                <label class="mr-2" data-i18n="labelVolume">Volumen:</label>
+                <input id="volumeSlider" type="range" min="0" max="1" step="0.01" value="1"
+                       class="w-20 h-2 bg-gray-300 rounded cursor-pointer">
+                <span id="volumeValue" class="w-8 text-right font-semibold ml-2">100%</span>
+            </div>
+
+            <!-- Velocidad -->
+            <div class="control-group">
+                <label class="mr-2" data-i18n="labelRate">Velocidad:</label>
+                <input id="rateSlider" type="range" min="0.5" max="2" value="1.0" step="0.1"
+                       class="w-20 h-2 bg-gray-300 rounded cursor-pointer">
+                <span id="rateValue" class="w-8 text-right font-semibold ml-2">1.0x</span>
+            </div>
         </div>
+
+        <!-- BOTONES CONTROL -->
+        <div class="flex flex-wrap justify-center gap-3 sm:gap-4 pt-4">
+
+            <!-- Anterior -->
+            <button id="prevParagraphButton" class="bg-blue-500 hover:bg-blue-600 text-white px-5 py-2 rounded-full font-semibold flex items-center space-x-2 shadow-md">
+                <span>⏪</span>
+                <span class="hidden sm:inline" data-i18n="buttonPrev">Anterior</span>
+            </button>
+
+            <!-- Reproducir / Pausar -->
+            <button id="playStopButton"
+                    class="bg-gray-700 hover:bg-gray-800 text-white px-8 py-3 rounded-full font-extrabold text-lg shadow-xl ring-4 ring-gray-300 flex items-center space-x-3">
+                <span id="playStopIcon">▶️</span>
+                <span id="playStopText" data-i18n="buttonPlay">Reproducir</span>
+            </button>
+
+            <!-- Siguiente -->
+            <button id="nextParagraphButton" class="bg-blue-500 hover:bg-blue-600 text-white px-5 py-2 rounded-full font-semibold flex items-center space-x-2 shadow-md">
+                <span class="hidden sm:inline" data-i18n="buttonNext">Siguiente</span>
+                <span>⏩</span>
+            </button>
+
+            <!-- Borrar -->
+            <button id="clearButton"
+                    class="bg-red-500 hover:bg-red-600 text-white px-5 py-2 rounded-full shadow-md flex items-center space-x-2">
+                <span>🗑️</span>
+                <span class="hidden sm:inline" data-i18n="buttonClear">Borrar</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Carga de PDF -->
+    <div class="space-y-3 p-4 bg-blue-50 border rounded-xl">
+        <label data-i18n="labelPdf" class="font-bold text-blue-800 text-lg">1. Cargar PDF:</label>
+        <input id="pdfFileInput" type="file" accept="application/pdf"
+               class="w-full text-sm text-blue-700 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-blue-200 file:text-blue-800 hover:file:bg-blue-300">
     </div>
 
     <!-- Área de texto -->
     <div>
-        <label for="textToRead" class="font-bold mb-2 block text-gray-700" data-i18n="labelTextarea">
-            Texto a leer:
-        </label>
-        <textarea id="textToRead"
-                  placeholder="Escribe o pega el texto aquí..."
+        <label class="font-bold block mb-2 text-gray-700 text-lg" data-i18n="labelTextarea">2. Texto a leer:</label>
+        <textarea id="textToRead" rows="10"
                   data-i18n-placeholder="placeholderTextarea"
-                  class="w-full p-4 border-2 border-gray-300 rounded-lg resize-none focus:border-blue-500 focus:ring-blue-500">
+                  placeholder="Escribe o pega el texto aquí"
+                  class="w-full p-4 border-2 border-gray-300 rounded-xl resize-none">
         </textarea>
     </div>
 
-    <!-- Controles -->
-    <div class="flex flex-col sm:flex-row justify-center gap-4">
-
-        <button id="playBtn"
-                class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-full font-bold shadow-md"
-                data-i18n="buttonPlay">
-            Reproducir
-        </button>
-
-        <button id="stopBtn"
-                class="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-full font-bold shadow-md"
-                data-i18n="buttonStop">
-            Detener
-        </button>
-    </div>
-
     <!-- Mensajes -->
-    <div id="messageArea" class="hidden mt-4 text-center p-3 rounded-lg text-sm font-semibold"></div>
+    <div id="messageArea" class="hidden mt-4 p-3 rounded text-center font-medium"></div>
 
-</div>
+</div> <!-- cierre de #app -->
+
+<!-- PDF.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 
 <script>
-/* -------------------- TRADUCCIONES -------------------- */
+/* -----------------------------------------------------------
+    TRADUCCIONES ES ↔ EN
+----------------------------------------------------------- */
 
 const translations = {
     es: {
         pageTitle: "Lector de texto",
         mainTitle: "Lector de texto",
         subTitle: "Carga un PDF, pega texto, ajusta el volumen y navega. Haz clic o selecciona texto para empezar a leer.",
+        labelPdf: "1. Cargar PDF:",
         labelLanguage: "Idioma:",
-        labelTextarea: "Texto a leer:",
-        placeholderTextarea: "Escribe o pega el texto aquí...",
+        labelVolume: "Volumen:",
+        labelRate: "Velocidad:",
+        labelParagraphCurrent: "Párrafo actual:",
+        labelTextarea: "2. Texto a leer:",
+        placeholderTextarea: "Escribe o pega el texto aquí. El texto extraído del PDF aparecerá aquí.",
         buttonPlay: "Reproducir",
-        buttonStop: "Detener",
-        alertNoText: "No hay texto para leer.",
-        alertUnsupported: "La función de voz no es compatible con este dispositivo."
+        buttonPause: "Pausar",
+        buttonResume: "Reanudar",
+        buttonPrev: "Anterior",
+        buttonNext: "Siguiente",
+        buttonClear: "Borrar",
+        alertErrorNotSupported: "La función de voz no está soportada.",
+        alertVoiceWarning: "No se encontró una voz adecuada. Se usará la predeterminada.",
+        alertEnd: "Fin del texto.",
+        alertStart: "Estás en el inicio del texto.",
+        alertPdfLoading: "Cargando PDF...",
+        alertPdfSuccess: "PDF cargado correctamente.",
+        alertPdfError: (e) => `Error cargando PDF: ${e}`,
     },
     en: {
         pageTitle: "Text reader",
         mainTitle: "Text reader",
-        subTitle: "Upload a PDF, paste text, adjust volume and navigate. Click or select text to start reading.",
+        subTitle: "Upload a PDF, paste text, adjust the volume, and navigate. Click or select text to start reading.",
+        labelPdf: "1. Upload PDF:",
         labelLanguage: "Language:",
-        labelTextarea: "Text to read:",
-        placeholderTextarea: "Write or paste text here...",
+        labelVolume: "Volume:",
+        labelRate: "Rate:",
+        labelParagraphCurrent: "Current paragraph:",
+        labelTextarea: "2. Text to read:",
+        placeholderTextarea: "Write or paste text here. Extracted PDF text will appear here.",
         buttonPlay: "Play",
-        buttonStop: "Stop",
-        alertNoText: "There is no text to read.",
-        alertUnsupported: "Speech synthesis is not supported on this device."
+        buttonPause: "Pause",
+        buttonResume: "Resume",
+        buttonPrev: "Previous",
+        buttonNext: "Next",
+        buttonClear: "Clear",
+        alertErrorNotSupported: "Speech synthesis is not supported.",
+        alertVoiceWarning: "No matching voice found. Using default.",
+        alertEnd: "End of text.",
+        alertStart: "You are at the start of the text.",
+        alertPdfLoading: "Loading PDF...",
+        alertPdfSuccess: "PDF loaded successfully.",
+        alertPdfError: (e) => `PDF load error: ${e}`,
     }
 };
 
-let currentLang = "es";
+/* -----------------------------------------------------------
+    VARIABLES GLOBALES
+----------------------------------------------------------- */
 
-/* APLICAR IDIOMA */
-function applyLanguage() {
-    const t = translations[currentLang];
+const synth = window.speechSynthesis;
+let utterance = null;
+
+let paragraphs = [];
+let currentParagraphIndex = -1;
+
+let currentLanguage = "es";
+let esVoice = null;
+let enVoice = null;
+
+let activeUtterances = [];
+let isManualStop = false;
+
+/* -----------------------------------------------------------
+    REFERENCIAS DOM
+----------------------------------------------------------- */
+
+const textToReadEl = document.getElementById("textToRead");
+const playStopButton = document.getElementById("playStopButton");
+const playStopIcon = document.getElementById("playStopIcon");
+const playStopText = document.getElementById("playStopText");
+
+const nextParagraphButton = document.getElementById("nextParagraphButton");
+const prevParagraphButton = document.getElementById("prevParagraphButton");
+const clearButton = document.getElementById("clearButton");
+
+const volumeSlider = document.getElementById("volumeSlider");
+const volumeValueEl = document.getElementById("volumeValue");
+
+const rateSlider = document.getElementById("rateSlider");
+const rateValueEl = document.getElementById("rateValue");
+
+const messageArea = document.getElementById("messageArea");
+const pdfFileInput = document.getElementById("pdfFileInput");
+const paragraphIndexDisplay = document.getElementById("paragraphIndexDisplay");
+const languageSelect = document.getElementById("languageSelect");
+
+/* -----------------------------------------------------------
+    FUNCIÓN: UPDATE UI TEXT I18N
+----------------------------------------------------------- */
+
+function updateUIText() {
+    const t = translations[currentLanguage];
 
     document.title = t.pageTitle;
 
-    document.querySelectorAll("[data-i18n]").forEach(el => {
+    document.querySelectorAll("[data-i18n]").forEach((el) => {
         const key = el.getAttribute("data-i18n");
         if (t[key]) el.textContent = t[key];
     });
 
-    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+    document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
         const key = el.getAttribute("data-i18n-placeholder");
         if (t[key]) el.placeholder = t[key];
     });
+
+    updateButtonState();
 }
 
-/* -------------------- TTS -------------------- */
+/* -----------------------------------------------------------
+    PARSEAR PÁRRAFOS
+----------------------------------------------------------- */
 
-const synth = window.speechSynthesis;
-let speaking = false;
-let utterance = null;
-
-function showMessage(text, color="yellow") {
-    const msg = document.getElementById("messageArea");
-    msg.className = `mt-4 text-center p-3 rounded-lg text-sm font-semibold bg-${color}-100 border border-${color}-300 text-${color}-800`;
-    msg.textContent = text;
-    msg.classList.remove("hidden");
-
-    setTimeout(() => msg.classList.add("hidden"), 3000);
+function parseParagraphs() {
+    const rawText = textToReadEl.value;
+    paragraphs = rawText.split(/\r?\n\s*\r?\n/).filter((p) => p.trim() !== "");
+    updateParagraphDisplay();
 }
 
-document.getElementById("playBtn").onclick = () => {
-    const text = document.getElementById("textToRead").value.trim();
-    if (!text) return showMessage(translations[currentLang].alertNoText, "red");
+/* -----------------------------------------------------------
+    INDICADOR PÁRRAFO
+----------------------------------------------------------- */
 
-    if (!synth) return showMessage(translations[currentLang].alertUnsupported, "red");
+function updateParagraphDisplay() {
+    const total = paragraphs.length;
+    const current =
+        currentParagraphIndex >= 0 && currentParagraphIndex < total
+            ? currentParagraphIndex + 1
+            : 0;
 
-    utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = currentLang === "es" ? "es-ES" : "en-US";
+    paragraphIndexDisplay.textContent = `${current} de ${total}`;
+}
+
+/* -----------------------------------------------------------
+    RESALTAR PÁRRAFO ACTUAL
+----------------------------------------------------------- */
+
+function scrollToCurrentParagraph(startChar = null, endChar = null) {
+    if (
+        currentParagraphIndex < 0 ||
+        currentParagraphIndex >= paragraphs.length
+    )
+        return;
+
+    const text = textToReadEl.value;
+    const rawParagraphs = text.split(/\r?\n\s*\r?\n/);
+
+    let pStart = 0;
+
+    for (let i = 0; i < currentParagraphIndex; i++) {
+        pStart +=
+            rawParagraphs[i].length +
+            (text.substring(pStart + rawParagraphs[i].length).match(/\r?\n\s*\r?\n/)?.[0]?.length || 2);
+    }
+
+    const start = pStart + (startChar || 0);
+    const end =
+        pStart +
+        (endChar !== null
+            ? endChar
+            : paragraphs[currentParagraphIndex].length);
+
+    textToReadEl.focus();
+    textToReadEl.setSelectionRange(start, end);
+
+    const lineHeight = parseInt(getComputedStyle(textToReadEl).lineHeight);
+    const lines = text.substring(0, start).split("\n").length;
+    textToReadEl.scrollTop = lines * lineHeight - textToReadEl.clientHeight / 2;
+}
+
+/* -----------------------------------------------------------
+    MOSTRAR MENSAJE
+----------------------------------------------------------- */
+
+function alertMessage(message, classes) {
+    messageArea.textContent = message;
+    messageArea.className = `mt-4 p-3 rounded-lg ${classes}`;
+    messageArea.classList.remove("hidden");
+
+    setTimeout(() => messageArea.classList.add("hidden"), 5000);
+}
+
+/* -----------------------------------------------------------
+    LECTURA TTS
+----------------------------------------------------------- */
+
+function speak(text, startCharIndex = 0) {
+    if (!synth) {
+        alertMessage(
+            translations[currentLanguage].alertErrorNotSupported,
+            "bg-red-100 border-red-300 text-red-800"
+        );
+        return;
+    }
+
+    const cleanedText = text ? text.trim() : "";
+    if (!cleanedText) return;
+
+    if (synth.paused) {
+        synth.resume();
+        updateButtonState();
+        return;
+    }
+
+    if (synth.speaking) {
+        synth.cancel();
+    }
+
+    utterance = new SpeechSynthesisUtterance(cleanedText);
+
+    utterance.volume = parseFloat(volumeSlider.value);
+    utterance.rate = parseFloat(rateSlider.value);
+    utterance.lang = currentLanguage === "es" ? "es-ES" : "en-US";
+
+    let selectedVoice = currentLanguage === "es" ? esVoice : enVoice;
+    if (selectedVoice) utterance.voice = selectedVoice;
+
+    activeUtterances.push(utterance);
+
+    utterance.onstart = () => {
+        updateButtonState();
+        scrollToCurrentParagraph(startCharIndex);
+    };
+
+    utterance.onpause = () => updateButtonState();
+
+    utterance.onboundary = (e) => {
+        if (e.name === "word") {
+            const start = e.charIndex;
+            const len = e.charLength;
+            scrollToCurrentParagraph(startCharIndex + start, startCharIndex + start + len);
+        }
+    };
+
+    utterance.onend = () => {
+        const idx = activeUtterances.indexOf(utterance);
+        if (idx > -1) activeUtterances.splice(idx, 1);
+
+        utterance = null;
+
+        if (isManualStop) {
+            isManualStop = false;
+            updateButtonState();
+            return;
+        }
+
+        setTimeout(() => goToNextParagraph(true), 100);
+    };
+
+    utterance.onerror = (e) => {
+        alertMessage("Error TTS: " + e.error, "bg-red-100 border-red-300 text-red-800");
+        stop();
+    };
+
+    const truncated = cleanedText.substring(startCharIndex);
+    const u2 = new SpeechSynthesisUtterance(truncated);
+
+    u2.volume = utterance.volume;
+    u2.rate = utterance.rate;
+    u2.lang = utterance.lang;
+    u2.voice = utterance.voice;
+
+    u2.onstart = utterance.onstart;
+    u2.onpause = utterance.onpause;
+    u2.onboundary = utterance.onboundary;
+    u2.onend = utterance.onend;
+    u2.onerror = utterance.onerror;
+
+    utterance = u2;
+    activeUtterances[activeUtterances.length - 1] = utterance;
 
     synth.speak(utterance);
-    speaking = true;
+}
+/* -----------------------------------------------------------
+    DETENER LECTURA
+----------------------------------------------------------- */
+
+function stop() {
+    isManualStop = true;
+    synth.cancel();
+    utterance = null;
+    updateButtonState();
+}
+
+/* -----------------------------------------------------------
+    PASAR AL SIGUIENTE PÁRRAFO
+----------------------------------------------------------- */
+
+function goToNextParagraph(auto = false) {
+    if (currentParagraphIndex >= paragraphs.length - 1) {
+        alertMessage(
+            translations[currentLanguage].alertEnd,
+            "bg-yellow-100 border-yellow-300 text-yellow-800"
+        );
+        stop();
+        return;
+    }
+
+    currentParagraphIndex++;
+    updateParagraphDisplay();
+
+    if (auto) speak(paragraphs[currentParagraphIndex]);
+}
+
+/* -----------------------------------------------------------
+    VOLVER AL PÁRRAFO ANTERIOR
+----------------------------------------------------------- */
+
+function goToPrevParagraph() {
+    if (currentParagraphIndex <= 0) {
+        alertMessage(
+            translations[currentLanguage].alertStart,
+            "bg-yellow-100 border-yellow-300 text-yellow-800"
+        );
+        stop();
+        return;
+    }
+
+    currentParagraphIndex--;
+    updateParagraphDisplay();
+    speak(paragraphs[currentParagraphIndex]);
+}
+
+/* -----------------------------------------------------------
+    CAMBIAR ESTADO DEL BOTÓN PRINCIPAL
+----------------------------------------------------------- */
+
+function updateButtonState() {
+    if (synth.speaking && !synth.paused) {
+        playStopIcon.textContent = "⏸️";
+        playStopText.textContent = translations[currentLanguage].buttonPause;
+    } else if (synth.paused) {
+        playStopIcon.textContent = "▶️";
+        playStopText.textContent = translations[currentLanguage].buttonResume;
+    } else {
+        playStopIcon.textContent = "▶️";
+        playStopText.textContent = translations[currentLanguage].buttonPlay;
+    }
+}
+
+/* -----------------------------------------------------------
+    BOTÓN PRINCIPAL REPRODUCIR / PAUSAR / REANUDAR
+----------------------------------------------------------- */
+
+playStopButton.addEventListener("click", () => {
+    if (synth.paused) {
+        synth.resume();
+        updateButtonState();
+        return;
+    }
+
+    if (synth.speaking) {
+        synth.pause();
+        updateButtonState();
+        return;
+    }
+
+    parseParagraphs();
+
+    if (!paragraphs.length) return;
+
+    if (currentParagraphIndex === -1) currentParagraphIndex = 0;
+
+    speak(paragraphs[currentParagraphIndex]);
+});
+
+/* -----------------------------------------------------------
+    BOTONES DE NAVEGACIÓN
+----------------------------------------------------------- */
+
+nextParagraphButton.addEventListener("click", () => {
+    stop();
+    goToNextParagraph(true);
+});
+
+prevParagraphButton.addEventListener("click", () => {
+    stop();
+    goToPrevParagraph();
+});
+
+/* -----------------------------------------------------------
+    BOTÓN BORRAR
+----------------------------------------------------------- */
+
+clearButton.addEventListener("click", () => {
+    stop();
+    textToReadEl.value = "";
+    paragraphs = [];
+    currentParagraphIndex = -1;
+    updateParagraphDisplay();
+});
+
+/* -----------------------------------------------------------
+    VOLUMEN Y VELOCIDAD
+----------------------------------------------------------- */
+
+volumeSlider.addEventListener("input", () => {
+    volumeValueEl.textContent = `${Math.round(volumeSlider.value * 100)}%`;
+});
+
+rateSlider.addEventListener("input", () => {
+    rateValueEl.textContent = `${rateSlider.value}x`;
+});
+
+/* -----------------------------------------------------------
+    CAMBIO DE IDIOMA
+----------------------------------------------------------- */
+
+languageSelect.addEventListener("change", () => {
+    currentLanguage = languageSelect.value;
+    updateUIText();
+});
+
+/* -----------------------------------------------------------
+    PDF — EXTRACCIÓN DE TEXTO
+----------------------------------------------------------- */
+
+pdfFileInput.addEventListener("change", async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    alertMessage(
+        translations[currentLanguage].alertPdfLoading,
+        "bg-blue-100 border-blue-300 text-blue-800"
+    );
+
+    try {
+        const pdf = await pdfjsLib.getDocument(URL.createObjectURL(file)).promise;
+        let fullText = "";
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const content = await page.getTextContent();
+            const strings = content.items.map((item) => item.str);
+            fullText += strings.join(" ") + "\n\n";
+        }
+
+        textToReadEl.value = fullText.trim();
+        parseParagraphs();
+        alertMessage(
+            translations[currentLanguage].alertPdfSuccess,
+            "bg-green-100 border-green-300 text-green-800"
+        );
+    } catch (e) {
+        alertMessage(
+            translations[currentLanguage].alertPdfError(e),
+            "bg-red-100 border-red-300 text-red-800"
+        );
+    }
+});
+
+/* -----------------------------------------------------------
+    INICIALIZACIÓN
+----------------------------------------------------------- */
+
+window.speechSynthesis.onvoiceschanged = () => {
+    const voices = window.speechSynthesis.getVoices();
+    esVoice = voices.find(v => v.lang.startsWith("es"));
+    enVoice = voices.find(v => v.lang.startsWith("en"));
 };
 
-document.getElementById("stopBtn").onclick = () => {
-    if (synth.speaking) synth.cancel();
-    speaking = false;
-};
-
-/* CAMBIO DE IDIOMA */
-document.getElementById("languageSelect").onchange = (e) => {
-    currentLang = e.target.value;
-    applyLanguage();
-};
-
-/* inicio */
-applyLanguage();
+updateUIText();
 
 </script>
 
